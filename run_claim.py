@@ -132,6 +132,10 @@ def evaluate(model, tokenizer, records: list[dict], device) -> dict:
         "generalization": sum(gen_correct) / len(gen_correct),
         "mem_correct": mem_correct,
         "gen_correct": gen_correct,
+        "sample_mem_prediction": tokenizer.decode([mem_predictions[0]]),
+        "sample_mem_target": tokenizer.decode([mem_targets[0]]),
+        "sample_gen_prediction": tokenizer.decode([gen_predictions[0]]),
+        "sample_gen_target": tokenizer.decode([gen_targets[0]]),
     }
 
 
@@ -248,11 +252,22 @@ def main() -> None:
         target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
     )
     model = get_peft_model(base, lora)
+    trainable = sum(parameter.numel() for parameter in model.parameters() if parameter.requires_grad)
+    total = sum(parameter.numel() for parameter in model.parameters())
+    print(f"PARAMETERS=trainable:{trainable};total:{total};fraction:{trainable / total:.6f}", flush=True)
     curve = []
 
     def run_eval(epoch: int) -> None:
         metrics = evaluate(model, tokenizer, records, device)
-        point = {"epoch": epoch, "memorization": metrics["memorization"], "generalization": metrics["generalization"]}
+        point = {
+            "epoch": epoch,
+            "memorization": metrics["memorization"],
+            "generalization": metrics["generalization"],
+            "sample_mem_prediction": metrics["sample_mem_prediction"],
+            "sample_mem_target": metrics["sample_mem_target"],
+            "sample_gen_prediction": metrics["sample_gen_prediction"],
+            "sample_gen_target": metrics["sample_gen_target"],
+        }
         curve.append(point)
         print("EPOCH_METRICS=" + json.dumps(point), flush=True)
 
@@ -267,18 +282,25 @@ def main() -> None:
             generator=generator,
             collate_fn=lambda batch: collate(batch, tokenizer.pad_token_id),
         )
-        optimizer = torch.optim.AdamW(model.parameters(), lr=float(CFG["learning_rate"]), weight_decay=float(CFG["weight_decay"]))
+        optimizer = torch.optim.AdamW(
+            [parameter for parameter in model.parameters() if parameter.requires_grad],
+            lr=float(CFG["learning_rate"]),
+            weight_decay=float(CFG["weight_decay"]),
+        )
         accumulation = int(CFG["gradient_accumulation"])
         eval_epochs = set(int(x) for x in CFG["evaluation_epochs"])
         optimizer.zero_grad(set_to_none=True)
         for epoch in range(1, int(CFG["epochs"]) + 1):
             model.train()
+            epoch_loss = 0.0
             for step, (ids, labels, masks) in enumerate(loader, start=1):
                 loss = model(input_ids=ids.to(device), labels=labels.to(device), attention_mask=masks.to(device)).loss / accumulation
+                epoch_loss += float(loss.detach()) * accumulation
                 loss.backward()
                 if step % accumulation == 0 or step == len(loader):
                     optimizer.step()
                     optimizer.zero_grad(set_to_none=True)
+            print(f"EPOCH_TRAIN_LOSS={epoch}:{epoch_loss / len(loader):.6f}", flush=True)
             if epoch in eval_epochs:
                 run_eval(epoch)
 
