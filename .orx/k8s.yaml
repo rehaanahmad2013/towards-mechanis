@@ -1,0 +1,36 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: knowing-using-{{ORX_RUN}}
+  labels:
+    orx-primary: "true"
+spec:
+  activeDeadlineSeconds: 10800
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app: knowing-using-reproduction
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: experiment
+          image: nvcr.io/nvidia/pytorch:25.06-py3
+          command: ["bash", "-c", "$ORX_SCRIPT"]
+          env:
+            - name: TOKENIZERS_PARALLELISM
+              value: "false"
+            - name: HF_HOME
+              value: /tmp/huggingface
+            - name: PYTORCH_CUDA_ALLOC_CONF
+              value: expandable_segments:True
+          resources:
+            requests:
+              cpu: "12"
+              memory: 64Gi
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: "24"
+              memory: 128Gi
+              nvidia.com/gpu: "1"
