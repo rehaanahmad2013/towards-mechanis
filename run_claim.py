@@ -241,7 +241,7 @@ def main() -> None:
     tokenizer.padding_side = "right"
     records = build_records(tokenizer)
     base = AutoModelForCausalLM.from_pretrained(
-        CFG["model"], torch_dtype=torch.bfloat16, attn_implementation="sdpa"
+        CFG["model"], torch_dtype=torch.float32, attn_implementation="eager"
     ).to(device)
     lora = LoraConfig(
         r=int(CFG["lora_rank"]),
