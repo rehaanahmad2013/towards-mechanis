@@ -1,7 +1,7 @@
 {
   "model": "Qwen/Qwen2.5-1.5B-Instruct",
   "chains": 256,
-  "epochs": 0,
+  "epochs": 50,
   "learning_rate": 0.0002,
   "weight_decay": 0.01,
   "lora_rank": 16,
@@ -10,6 +10,6 @@
   "batch_size": 4,
   "gradient_accumulation": 2,
   "seed": 42,
-  "evaluation_epochs": [0],
-  "patch_examples": 0
+  "evaluation_epochs": [0, 1, 2, 4, 8, 12, 16, 24, 32, 40, 50],
+  "patch_examples": 32
 }
